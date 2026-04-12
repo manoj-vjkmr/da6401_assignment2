@@ -11,27 +11,19 @@ class MultiTaskPerceptionModel(nn.Module):
                  classifier_path: str = "classifier.pth", localizer_path: str = "localizer.pth", unet_path: str = "unet.pth"):
         super().__init__()
         
-        # 1. Downloads
-        if not os.path.exists(classifier_path):
-            try:
-                import gdown
-                gdown.download(id="1YVvPTe2y5m_-m7Ky733kGjmc4OTxtOMw", output=classifier_path, quiet=False)
-                gdown.download(id="1wZtrvM6Ru0kBPk_ZX9EDtcOwSW61lyZU", output=localizer_path, quiet=False)
-                gdown.download(id="1zZyAKYB4RgQffXgWv2WNndZ1R0B7O5Sn", output=unet_path, quiet=False)
-            except Exception:
-                pass
-
-        # 2. Architecture Definitions
+        # 1. Initialize the shared backbone
         self.encoder = VGG11Encoder(in_channels=in_channels)
+        
+        # 2. Initialize temporary full models to get their heads/decoders
         cls_temp = VGG11Classifier(num_classes=num_breeds, in_channels=in_channels)
         loc_temp = VGG11Localizer(in_channels=in_channels)
         seg_temp = VGG11UNet(num_classes=seg_classes, in_channels=in_channels)
 
-        # Bind Heads
+        # 3. BIND THE HEADS (Do this OUTSIDE any try/except or if block)
         self.classifier_head = cls_temp.classifier
         self.localizer_head = loc_temp.regressor
         
-        # Bind Segmentation Decoder
+        # Bind Segmentation Decoder Path
         self.seg_upconv5 = seg_temp.upconv5
         self.seg_dec_block5 = seg_temp.dec_block5
         self.seg_upconv4 = seg_temp.upconv4
@@ -44,17 +36,28 @@ class MultiTaskPerceptionModel(nn.Module):
         self.seg_dec_block1 = seg_temp.dec_block1
         self.seg_final_conv = seg_temp.final_conv
 
-        # 3. Load Weights
-        for path, model_part in zip([classifier_path, localizer_path, unet_path], [cls_temp, loc_temp, seg_temp]):
-            if os.path.exists(path):
-                try:
-                    model_part.load_state_dict(torch.load(path, map_location="cpu"))
-                except Exception:
-                    print(f"Failed to load {path}")
-        
-        # Sync encoder with classifier weights (primary backbone)
-        self.encoder.load_state_dict(cls_temp.encoder.state_dict())
+        # 4. DOWNLOAD & LOAD WEIGHTS (Handle errors gracefully)
+        if not os.path.exists(classifier_path):
+            try:
+                import gdown
+                gdown.download(id="1YVvPTe2y5m_-m7Ky733kGjmc4OTxtOMw", output=classifier_path, quiet=False)
+                gdown.download(id="1wZtrvM6Ru0kBPk_ZX9EDtcOwSW61lyZU", output=localizer_path, quiet=False)
+                gdown.download(id="1zZyAKYB4RgQffXgWv2WNndZ1R0B7O5Sn", output=unet_path, quiet=False)
+            except Exception:
+                pass
 
+        try:
+            if os.path.exists(classifier_path):
+                cls_temp.load_state_dict(torch.load(classifier_path, map_location="cpu"))
+                self.encoder.load_state_dict(cls_temp.encoder.state_dict())
+            if os.path.exists(localizer_path):
+                loc_temp.load_state_dict(torch.load(localizer_path, map_location="cpu"))
+            if os.path.exists(unet_path):
+                seg_temp.load_state_dict(torch.load(unet_path, map_location="cpu"))
+            print("Successfully loaded weights into attributes.")
+        except Exception as e:
+            print(f"Note: Some weights could not be loaded ({e}). Using random initialization.")
+            
     def forward(self, x: torch.Tensor):
         bottleneck, features = self.encoder(x, return_features=True)
         
