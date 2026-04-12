@@ -1,7 +1,7 @@
 import os
 import torch
 import torch.nn as nn
-from .vgg11 import VGG11Encoder
+from .vgg11 import VGG11
 from .classification import VGG11Classifier
 from .localization import VGG11Localizer
 from .segmentation import VGG11UNet
@@ -13,7 +13,7 @@ class MultiTaskPerceptionModel(nn.Module):
                  unet_path: str = "unet.pth"):
         super().__init__()
         
-        self.encoder = VGG11Encoder(in_channels=in_channels)
+        self.encoder = VGG11(in_channels=in_channels)
         cls_temp = VGG11Classifier(num_classes=num_breeds, in_channels=in_channels)
         loc_temp = VGG11Localizer(in_channels=in_channels)
         seg_temp = VGG11UNet(num_classes=seg_classes, in_channels=in_channels)
@@ -70,7 +70,8 @@ class MultiTaskPerceptionModel(nn.Module):
         bottleneck, features = self.encoder(x, return_features=True)
         
         logits = self.classifier_head(bottleneck)
-        bbox = self.localizer_head(bottleneck)
+        
+        bbox = self.localizer_head(bottleneck) * 224.0 
         
         d5 = self.seg_dec5(torch.cat([self.seg_upconv5(bottleneck), features["relu5"]], dim=1))
         d4 = self.seg_dec4(torch.cat([self.seg_upconv4(d5), features["relu4"]], dim=1))
