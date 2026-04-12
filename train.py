@@ -70,9 +70,20 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    print("Loading dataset...")
-    train_dataset = OxfordIIITPetDataset(root_dir=args.data_dir, split="trainval")
+    print("Loading datasets...")
+    # 1. Load the FULL dataset that is guaranteed to have XMLs
+    full_dataset = OxfordIIITPetDataset(root_dir=args.data_dir, split="trainval")
+    
+    # 2. Dynamically split it 80% Train / 20% Val
+    train_size = int(0.8 * len(full_dataset))
+    val_size = len(full_dataset) - train_size
+    
+    # Use a fixed generator seed so your split is consistent across runs
+    generator = torch.Generator().manual_seed(42)
+    train_dataset, val_dataset = torch.utils.data.random_split(full_dataset, [train_size, val_size], generator=generator)
+
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
     
     print(f"Initializing {args.task} model...")
     if args.task == 'classification':
