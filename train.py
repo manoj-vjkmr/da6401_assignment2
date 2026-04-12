@@ -57,9 +57,7 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
-    #DATA_DIR = "./dataset"
-    DATA_DIR = r"C:\Users\ashke\Downloads\oxford-iiit-pet"
-
+    DATA_DIR = "./dataset"
     print("Loading datasets...")
     train_dataset = OxfordIIITPetDataset(DATA_DIR, split="train")
     val_dataset = OxfordIIITPetDataset(DATA_DIR, split="val")
@@ -98,12 +96,13 @@ def main():
             optimizer.zero_grad()
             outputs = model(images)
             
-            loss_cls = criterion_cls(outputs['classification'], target_cls)
-            loss_loc = criterion_loc(outputs['localization'], target_loc)
-            loss_seg = criterion_seg(outputs['segmentation'], target_seg)
+            loss_cls = criterion_cls(outputs['classification'], targets['classification'])
+            loss_loc = criterion_loc(outputs['localization'], targets['localization'])
+            loss_seg = criterion_seg(outputs['segmentation'], targets['segmentation'])
+
+            total_loss = loss_cls + (loss_loc * 0.001) + loss_seg
+            print(f"Cls Loss: {loss_cls.item():.4f} | Loc Loss: {loss_loc.item():.4f} | Seg Loss: {loss_seg.item():.4f}")
             
-            #loss = loss_cls + (loss_loc * 0.1) + loss_seg
-            loss = (loss_cls * 10.0) + (loss_loc * 0.001) + (loss_seg * 2.0)
             loss.backward()
             
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
