@@ -8,8 +8,6 @@ from albumentations.pytorch import ToTensorV2
 from PIL import Image
 
 class OxfordIIITPetDataset(Dataset):
-
-
     def __init__(self, root_dir: str, split: str = "trainval", transform=None):
         self.root_dir = root_dir
         self.split = split
@@ -20,11 +18,10 @@ class OxfordIIITPetDataset(Dataset):
         self.xmls_dir = os.path.join(self.annotations_dir, "xmls")
         
         split_file = os.path.join(self.annotations_dir, f"{split}.txt")
-        self.samples = []
-        
         if not os.path.exists(split_file):
             split_file = os.path.join(root_dir, f"{split}.txt")
 
+        self.samples = []
         with open(split_file, "r") as f:
             for line in f:
                 parts = line.strip().split()
@@ -56,8 +53,12 @@ class OxfordIIITPetDataset(Dataset):
         image = np.array(Image.open(img_path).convert("RGB"))
         
         trimap_path = os.path.join(self.trimaps_dir, f"{file_name}.png")
-        mask = np.array(Image.open(trimap_path))
-        mask = mask - 1 
+        raw_mask = np.array(Image.open(trimap_path))
+        
+        mask = np.zeros_like(raw_mask)
+        mask[raw_mask == 2] = 0
+        mask[raw_mask == 1] = 1
+        mask[raw_mask == 3] = 2
         
         xml_path = os.path.join(self.xmls_dir, f"{file_name}.xml")
         tree = ET.parse(xml_path)
@@ -95,4 +96,3 @@ class OxfordIIITPetDataset(Dataset):
         bbox_t = torch.tensor([cx, cy, w, h], dtype=torch.float32)
         
         return image_t, breed_id, bbox_t, mask_t
-        

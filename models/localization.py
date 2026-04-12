@@ -1,15 +1,10 @@
-
-
 import torch
 import torch.nn as nn
 from .vgg11 import VGG11Encoder
 from .layers import CustomDropout
 
 class VGG11Localizer(nn.Module):
-
-
     def __init__(self, in_channels: int = 3, dropout_p: float = 0.5):
-
         super().__init__()
         self.encoder = VGG11Encoder(in_channels=in_channels)
         
@@ -21,14 +16,9 @@ class VGG11Localizer(nn.Module):
             nn.Linear(4096, 1024),
             nn.ReLU(inplace=True),
             CustomDropout(p=dropout_p),
-            nn.Linear(1024, 4),
-            nn.Sigmoid()
+            nn.Linear(1024, 4) 
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-
         bottleneck = self.encoder(x, return_features=False)
-        
-        out = self.regressor(bottleneck)
-        
-        return out * 224.0
+        return self.regressor(bottleneck)

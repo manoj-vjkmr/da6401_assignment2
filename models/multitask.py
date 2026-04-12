@@ -32,8 +32,8 @@ class MultiTaskPerceptionModel(nn.Module):
             try:
                 import gdown
                 gdown.download(id="1ErN9X3BrHDFvRTE1nniTRAbRfRIimfPU", output=classifier_path, quiet=False)
-                gdown.download(id="1HSqaWzqC2EIx-2N6YHm4LbKnc5Ky4SGv", output=localizer_path, quiet=False)
-                gdown.download(id="1wPf7UFwI9R6vzQn8j6oFp6ncaxQCiZ-b", output=unet_path, quiet=False)
+                gdown.download(id="18Gyh1xkSRoQ_ldzGQUEFa1x_J47IAifP", output=localizer_path, quiet=False)
+                gdown.download(id="1Zh2PW_dAnmsjzil8Q0I__qpbp9E7vfr_", output=unet_path, quiet=False)
             except Exception as e:
                 print(f"Download failed: {e}")
 
@@ -71,8 +71,9 @@ class MultiTaskPerceptionModel(nn.Module):
         
         logits = self.classifier_head(bottleneck)
         
-        bbox = self.localizer_head(bottleneck) * 224.0 
-        
+        #bbox = self.localizer_head(bottleneck) * 224.0 
+        bbox = self.localizer_head(bottleneck)
+
         d5 = self.seg_dec5(torch.cat([self.seg_upconv5(bottleneck), features["relu5"]], dim=1))
         d4 = self.seg_dec4(torch.cat([self.seg_upconv4(d5), features["relu4"]], dim=1))
         d3 = self.seg_dec3(torch.cat([self.seg_upconv3(d4), features["relu3"]], dim=1))

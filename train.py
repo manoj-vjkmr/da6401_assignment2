@@ -31,7 +31,6 @@ def parse_args():
     return parser.parse_args()
 
 def calculate_iou_accuracy(preds, targets, threshold=0.5):
-
     with torch.no_grad():
         p_cx, p_cy, p_w, p_h = preds.unbind(dim=-1)
         t_cx, t_cy, t_w, t_h = targets.unbind(dim=-1)
@@ -87,17 +86,20 @@ def main():
     train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=4)
     
+    seg_weights = torch.tensor([0.2, 3.0, 3.0]).to(device)
+    criterion_cls = nn.CrossEntropyLoss()
+    criterion_seg = nn.CrossEntropyLoss(weight=seg_weights)
+    iou_loss_fn = IoULoss(reduction="mean")
+    mse_loss_fn = nn.MSELoss()
+
     if args.task == 'classification':
         model = VGG11Classifier(num_classes=37, dropout_p=args.dropout_p).to(device)
-        criterion = nn.CrossEntropyLoss()
         save_path = "checkpoints/classifier.pth"
     elif args.task == 'localization':
         model = VGG11Localizer(dropout_p=args.dropout_p).to(device)
-        mse_loss, iou_loss = nn.MSELoss(), IoULoss(reduction="mean")
         save_path = "checkpoints/localizer.pth"
     elif args.task == 'segmentation':
         model = VGG11UNet(num_classes=3, dropout_p=args.dropout_p).to(device)
-        criterion = nn.CrossEntropyLoss()
         save_path = "checkpoints/unet.pth"
         apply_freeze_strategy(model, args.freeze_strategy)
     elif args.task == 'multitask':
@@ -116,18 +118,18 @@ def main():
             optimizer.zero_grad()
             
             if args.task == 'classification':
-                loss = criterion(model(images), labels)
+                loss = criterion_cls(model(images), labels)
             elif args.task == 'localization':
                 preds = model(images)
-                loss = mse_loss(preds / 224.0, bboxes / 224.0) + iou_loss(preds, bboxes)
+                loss = mse_loss_fn(preds / 224.0, bboxes / 224.0) + (5.0 * iou_loss_fn(preds, bboxes))
             elif args.task == 'segmentation':
-                loss = criterion(model(images), masks)
+                loss = criterion_seg(model(images), masks)
             elif args.task == 'multitask':
                 out = model(images)
-                l_cls = nn.CrossEntropyLoss()(out['classification'], labels)
-                l_loc = nn.MSELoss()(out['localization']/224.0, bboxes/224.0) + IoULoss()(out['localization'], bboxes)
-                l_seg = nn.CrossEntropyLoss()(out['segmentation'], masks)
-                loss = l_cls + l_loc + l_seg
+                l_cls = criterion_cls(out['classification'], labels)
+                l_loc = mse_loss_fn(out['localization']/224.0, bboxes/224.0) + (5.0 * iou_loss_fn(out['localization'], bboxes))
+                l_seg = criterion_seg(out['segmentation'], masks)
+                loss = (0.2 * l_cls) + l_loc + l_seg
 
             loss.backward()
             optimizer.step()
@@ -140,18 +142,18 @@ def main():
             for imgs, lbls, box, msk in val_loader:
                 imgs, lbls, box, msk = imgs.to(device), lbls.to(device), box.to(device), msk.to(device)
                 if args.task == 'classification':
-                    v_loss += criterion(model(imgs), lbls).item()
+                    v_loss += criterion_cls(model(imgs), lbls).item()
                 elif args.task == 'localization':
                     p = model(imgs)
-                    v_loss += (nn.MSELoss()(p/224.0, box/224.0) + IoULoss()(p, box)).item()
+                    v_loss += (mse_loss_fn(p/224.0, box/224.0) + iou_loss_fn(p, box)).item()
                     v_iou_acc += calculate_iou_accuracy(p, box).item()
                 elif args.task == 'segmentation':
-                    v_loss += criterion(model(imgs), msk).item()
+                    v_loss += criterion_seg(model(imgs), msk).item()
                 elif args.task == 'multitask':
                     o = model(imgs)
-                    vl = nn.CrossEntropyLoss()(o['classification'], lbls) + \
-                         (nn.MSELoss()(o['localization']/224.0, box/224.0) + IoULoss()(o['localization'], box)) + \
-                         nn.CrossEntropyLoss()(o['segmentation'], msk)
+                    vl = criterion_cls(o['classification'], lbls) + \
+                         (mse_loss_fn(o['localization']/224.0, box/224.0) + iou_loss_fn(o['localization'], box)) + \
+                         criterion_seg(o['segmentation'], msk)
                     v_loss += vl.item()
                     v_iou_acc += calculate_iou_accuracy(o['localization'], box).item()
 
