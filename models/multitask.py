@@ -11,7 +11,6 @@ class MultiTaskPerceptionModel(nn.Module):
                  classifier_path: str = "classifier.pth", localizer_path: str = "localizer.pth", unet_path: str = "unet.pth"):
         super().__init__()
         
-        # 1. DEFINE ARCHITECTURE FIRST (Ensures attributes always exist)
         self.encoder = VGG11Encoder(in_channels=in_channels)
         cls_temp = VGG11Classifier(num_classes=num_breeds, in_channels=in_channels)
         loc_temp = VGG11Localizer(in_channels=in_channels)
@@ -27,13 +26,12 @@ class MultiTaskPerceptionModel(nn.Module):
         self.seg_upconv1, self.seg_dec_block1 = seg_temp.upconv1, seg_temp.dec_block1
         self.seg_final_conv = seg_temp.final_conv
 
-        # 2. DOWNLOAD & LOAD WEIGHTS
         if not os.path.exists(classifier_path):
             try:
                 import gdown
-                gdown.download(id="1YVvPTe2y5m_-m7Ky733kGjmc4OTxtOMw", output=classifier_path, quiet=False)
-                gdown.download(id="1wZtrvM6Ru0kBPk_ZX9EDtcOwSW61lyZU", output=localizer_path, quiet=False)
-                gdown.download(id="1zZyAKYB4RgQffXgWv2WNndZ1R0B7O5Sn", output=unet_path, quiet=False)
+                gdown.download(id="1ErN9X3BrHDFvRTE1nniTRAbRfRIimfPU", output=classifier_path, quiet=False)
+                gdown.download(id="1rvdObqhW3uUwgYgrEwi3QD2BKinFyOES", output=localizer_path, quiet=False)
+                gdown.download(id="1JfScQk7-VKErpVM9pTHxWEB0s_c15ZWC", output=unet_path, quiet=False)
             except: pass
 
         try:

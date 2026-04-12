@@ -1,82 +1,107 @@
+"""Dataset skeleton for Oxford-IIIT Pet."""
+
 import os
 import xml.etree.ElementTree as ET
 import numpy as np
 import torch
 from torch.utils.data import Dataset
-from PIL import Image
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
+from PIL import Image
 
 class OxfordIIITPetDataset(Dataset):
-    def __init__(self, root_dir, split="train", transforms=None):
+    """Oxford-IIIT Pet multi-task dataset loader skeleton."""
+
+    def __init__(self, root_dir: str, split: str = "trainval", transform=None):
+        """
+        Initialize the dataset.
+        Args:
+            root_dir: Path to the dataset root (should contain 'images' and 'annotations' folders).
+            split: 'trainval' or 'test'.
+            transform: Albumentations composition for augmentations.
+        """
         self.root_dir = root_dir
         self.split = split
         
-        # Default transforms if none provided
-        self.transforms = transforms if transforms else A.Compose([
-            A.Resize(224, 224),
-            A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
-            ToTensorV2()
-        ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['class_labels']))
-
-        split_path = os.path.join(root_dir, 'annotations', 'trainval.txt')
-        all_samples = []
+        self.images_dir = os.path.join(root_dir, "images")
+        self.annotations_dir = os.path.join(root_dir, "annotations")
+        self.trimaps_dir = os.path.join(self.annotations_dir, "trimaps")
+        self.xmls_dir = os.path.join(self.annotations_dir, "xmls")
         
-        # Load and verify all paths
-        if not os.path.exists(split_path):
-            raise FileNotFoundError(f"Cannot find {split_path}")
-
-        with open(split_path, 'r') as f:
+        # Load the split list
+        split_file = os.path.join(self.annotations_dir, f"{split}.txt")
+        self.samples = []
+        
+        with open(split_file, "r") as f:
             for line in f:
                 parts = line.strip().split()
-                if len(parts) >= 2:
-                    img_name = parts[0]
-                    img_path = os.path.join(root_dir, 'images', f"{img_name}.jpg")
-                    mask_path = os.path.join(root_dir, 'annotations', 'trimaps', f"{img_name}.png")
-                    xml_path = os.path.join(root_dir, 'annotations', 'xmls', f"{img_name}.xml")
-                    
-                    if os.path.exists(img_path) and os.path.exists(mask_path) and os.path.exists(xml_path):
-                        all_samples.append({
-                            'img_path': img_path, 
-                            'mask_path': mask_path, 
-                            'xml_path': xml_path, 
-                            'class_id': int(parts[1])-1
-                        })
-        
-        # 80/20 split
-        idx = int(len(all_samples) * 0.8)
-        self.samples = all_samples[:idx] if split == 'train' else all_samples[idx:]
+                if not parts:
+                    continue
+                file_name = parts[0]
+                # Breed ID is 1-indexed in the file, we convert to 0-indexed (0 to 36)
+                breed_id = int(parts[1]) - 1 
+                
+                # Check if this specific image has an XML bounding box. 
+                # Not all images in Oxford-Pets have XMLs. We only keep those that do for multi-tasking.
+                xml_path = os.path.join(self.xmls_dir, f"{file_name}.xml")
+                if os.path.exists(xml_path):
+                    self.samples.append((file_name, breed_id))
 
-    def __len__(self): 
+        # Default transform: Resize to 224x224 and Normalize
+        if transform is None:
+            self.transform = A.Compose([
+                A.Resize(224, 224),
+                A.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)),
+                ToTensorV2(),
+            ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['class_labels']))
+        else:
+            self.transform = transform
+
+    def __len__(self) -> int:
         return len(self.samples)
 
-    def __getitem__(self, idx):
-        s = self.samples[idx]
-        img = np.array(Image.open(s['img_path']).convert("RGB"))
-        mask = np.array(Image.open(s['mask_path'])) - 1 # 0, 1, 2
+    def __getitem__(self, idx: int):
+        file_name, breed_id = self.samples[idx]
         
-        # Parse Bounding Box
-        tree = ET.parse(s['xml_path'])
+        # 1. Load Image
+        img_path = os.path.join(self.images_dir, f"{file_name}.jpg")
+        image = np.array(Image.open(img_path).convert("RGB"))
+        
+        # 2. Load Segmentation Trimap
+        # Trimaps have pixel values 1 (foreground), 2 (background), 3 (not classified/border)
+        # We subtract 1 to map to 0, 1, 2 for CrossEntropyLoss
+        trimap_path = os.path.join(self.trimaps_dir, f"{file_name}.png")
+        mask = np.array(Image.open(trimap_path)) - 1
+        
+        # 3. Load Bounding Box
+        xml_path = os.path.join(self.xmls_dir, f"{file_name}.xml")
+        tree = ET.parse(xml_path)
         root = tree.getroot()
-        box = [float(root.find('object/bndbox/' + x).text) for x in ['xmin', 'ymin', 'xmax', 'ymax']]
-
-        # Apply Albumentations (Resizes image and adjusts bbox coordinates)
-        ts = self.transforms(image=img, mask=mask, bboxes=[box], class_labels=[s['class_id']])
+        bndbox = root.find('object').find('bndbox')
+        xmin = float(bndbox.find('xmin').text)
+        ymin = float(bndbox.find('ymin').text)
+        xmax = float(bndbox.find('xmax').text)
+        ymax = float(bndbox.find('ymax').text)
         
-        # Bbox conversion and NORMALIZATION
-        if len(ts['bboxes']) > 0:
-            xm, ym, xmx, ymx = ts['bboxes'][0]
-            w, h = xmx - xm, ymx - ym
-            cx, cy = xm + w/2, ym + h/2
-            
-            # NORMALIZATION: Scale [0, 224] to [0, 1]
-            # This is the "Final Boss" fix for the 13000 loss issue
-            target_bbox = torch.tensor([cx/224.0, cy/224.0, w/224.0, h/224.0], dtype=torch.float32)
+        bboxes = [[xmin, ymin, xmax, ymax]]
+        class_labels = [breed_id] # Dummy label field for albumentations
+        
+        # 4. Apply Transformations
+        transformed = self.transform(image=image, mask=mask, bboxes=bboxes, class_labels=class_labels)
+        image_t = transformed['image']
+        mask_t = transformed['mask'].long()
+        
+        # Albumentations output bbox is still [xmin, ymin, xmax, ymax] but scaled to 224x224
+        if len(transformed['bboxes']) > 0:
+            tx_min, ty_min, tx_max, ty_max = transformed['bboxes'][0]
         else:
-            target_bbox = torch.zeros(4, dtype=torch.float32)
-
-        return ts['image'], {
-            'classification': torch.tensor(s['class_id'], dtype=torch.long),
-            'localization': target_bbox,
-            'segmentation': ts['mask'].long()
-        }
+            tx_min, ty_min, tx_max, ty_max = 0, 0, 0, 0 # Fallback 
+            
+        # Convert to [x_center, y_center, width, height] format in 224x224 pixel space
+        w = tx_max - tx_min
+        h = ty_max - ty_min
+        cx = tx_min + (w / 2.0)
+        cy = ty_min + (h / 2.0)
+        bbox_t = torch.tensor([cx, cy, w, h], dtype=torch.float32)
+        
+        return image_t, breed_id, bbox_t, mask_t
