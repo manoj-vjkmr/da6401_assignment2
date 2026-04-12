@@ -1,0 +1,5 @@
+*.pth
+dataset/
+wandb/
+__pycache__/
+.ipynb_checkpoints/
