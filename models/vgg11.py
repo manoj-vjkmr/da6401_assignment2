@@ -1,12 +1,12 @@
-"""VGG11 encoder"""
+"""VGG11Encoder encoder"""
 
 from typing import Dict, Tuple, Union
 
 import torch
 import torch.nn as nn
 
-class VGG11(nn.Module):
-    """VGG11-style encoder with optional intermediate feature returns."""
+class VGG11Encoder(nn.Module):
+    """VGG11Encoder-style encoder with optional intermediate feature returns."""
 
     def __init__(self, in_channels: int = 3):
         """Initialize the VGG11Encoder model."""

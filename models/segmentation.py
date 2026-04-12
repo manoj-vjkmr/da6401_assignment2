@@ -2,14 +2,14 @@
 
 import torch
 import torch.nn as nn
-from .vgg11 import VGG11
+from .vgg11 import VGG11Encoder
 
 class VGG11UNet(nn.Module):
 
 
     def __init__(self, num_classes: int = 3, in_channels: int = 3, dropout_p: float = 0.5):
         super().__init__()
-        self.encoder = VGG11(in_channels=in_channels)
+        self.encoder = VGG11Encoder(in_channels=in_channels)
         
         def up_block(in_c, skip_c, out_c):
             return nn.Sequential(

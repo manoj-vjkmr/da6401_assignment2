@@ -2,7 +2,7 @@
 
 import torch
 import torch.nn as nn
-from .vgg11 import VGG11
+from .vgg11 import VGG11Encoder
 from .layers import CustomDropout
 
 class VGG11Localizer(nn.Module):
@@ -11,7 +11,7 @@ class VGG11Localizer(nn.Module):
     def __init__(self, in_channels: int = 3, dropout_p: float = 0.5):
 
         super().__init__()
-        self.encoder = VGG11(in_channels=in_channels)
+        self.encoder = VGG11Encoder(in_channels=in_channels)
         
         self.regressor = nn.Sequential(
             nn.Flatten(),
