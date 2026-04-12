@@ -32,8 +32,8 @@ class MultiTaskPerceptionModel(nn.Module):
             try:
                 import gdown
                 gdown.download(id="1ErN9X3BrHDFvRTE1nniTRAbRfRIimfPU", output=classifier_path, quiet=False)
-                gdown.download(id="18Gyh1xkSRoQ_ldzGQUEFa1x_J47IAifP", output=localizer_path, quiet=False)
-                gdown.download(id="1Zh2PW_dAnmsjzil8Q0I__qpbp9E7vfr_", output=unet_path, quiet=False)
+                gdown.download(id="1RcNPOBKOlTJNrxusSoR-bBn8BVnafU1a", output=localizer_path, quiet=False)
+                gdown.download(id="1bh3lN6B2-gXhRAIJnO_VvVF9m0BRlJBo", output=unet_path, quiet=False)
             except Exception as e:
                 print(f"Download failed: {e}")
 
