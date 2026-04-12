@@ -1,11 +1,11 @@
-"""Segmentation model"""
+
 
 import torch
 import torch.nn as nn
 from .vgg11 import VGG11Encoder
 
 class VGG11UNet(nn.Module):
-    """U-Net style segmentation network."""
+
 
     def __init__(self, num_classes: int = 3, in_channels: int = 3, dropout_p: float = 0.5):
         super().__init__()
@@ -21,31 +21,24 @@ class VGG11UNet(nn.Module):
                 nn.ReLU(inplace=True)
             )
 
-        # Transposed Convolutions & Decoder Blocks
-        # Stage 5
         self.upconv5 = nn.ConvTranspose2d(512, 512, kernel_size=2, stride=2)
-        self.dec5 = up_block(512, 512, 512) # up(512) + skip(relu5: 512)
+        self.dec5 = up_block(512, 512, 512)
         
-        # Stage 4
         self.upconv4 = nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2)
-        self.dec4 = up_block(256, 512, 256) # up(256) + skip(relu4: 512)
+        self.dec4 = up_block(256, 512, 256)
         
-        # Stage 3
         self.upconv3 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)
-        self.dec3 = up_block(128, 256, 128) # up(128) + skip(relu3: 256)
+        self.dec3 = up_block(128, 256, 128)
         
-        # Stage 2
         self.upconv2 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
-        self.dec2 = up_block(64, 128, 64)   # up(64) + skip(relu2: 128)
+        self.dec2 = up_block(64, 128, 64)
         
-        # Stage 1 (Final)
         self.upconv1 = nn.ConvTranspose2d(64, 64, kernel_size=2, stride=2)
-        self.final_conv = nn.Conv2d(64 + 64, num_classes, kernel_size=1) # up(64) + skip(relu1: 64)
+        self.final_conv = nn.Conv2d(64 + 64, num_classes, kernel_size=1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         bottleneck, features = self.encoder(x, return_features=True)
         
-        # Decoder path with skip connections via concatenation
         d5 = self.upconv5(bottleneck)
         d5 = torch.cat((d5, features['relu5']), dim=1)
         d5 = self.dec5(d5)
